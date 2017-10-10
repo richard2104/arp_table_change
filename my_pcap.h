@@ -7,6 +7,7 @@
 #include <arpa/inet.h>
 //#include <netinet/tcp.h> was not used, since I used my own structure tr0y_tcphdr
 
+#include <unistd.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/ioctl.h>

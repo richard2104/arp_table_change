@@ -30,7 +30,7 @@ int main(int argc, char* argv[]) {
 
 	// argv[2],argv[3] to sender and target
 	inet_pton(AF_INET,argv[2],&senderIP.s_addr); //10진수 IP 주소를 2진수 IP 주소로 변환하는 함수
-	inet_pton(AF_INET,argv[3],&targetIP.s_addr);
+	inet_pton(AF_INET,argv[3],&targetIP.s_addr); //senderIP: victim / targetIP == gateway
 
 	pcd = pcap_open_live(dev,BUFSIZ,1,1000,errbuf);
 	if(pcd == NULL){
@@ -44,37 +44,11 @@ int main(int argc, char* argv[]) {
     }
 
 	// me(attacker) request to victim for mac address.
-	ARP_REQUEST(pcd,my_mac,my_ip,&myIP,&senderIP); // sender == victim / target == gateway
+	ARP_REQUEST(pcd,my_mac,my_ip,&senderIP); // sender == victim / target == gateway
 	
 
-/*
-	// 1st stage: making ARP packet (request) or you can just broadcast and jump over to 3rd stage
-	memset(packet, 0, sizeof(packet));
-
-
-	// 2nd stage: sending ARP packet for getting victim's mac address
-    if(pcap_sendpacket(pcd,packet,length) != 0 ) {
-       fprintf(stderr,"\nError sending the packet: \n", pcap_geterr(pcd));
-       return -1;
-    }
-	
-
-	// 3rd stage: capturing the ARP packet (reply) for getting victim's mac address
-	pcap_loop(pcd, 0, callback, NULL);
-
-*/
 }
 
-void callback(u_char *p, const struct pcap_pkthdr *pkthdr, const u_char *packet) {
-
-    struct ether_header *etherHdr; // <netinet/ether.h>
-    struct ip *ipHdr; // <netinet/ip.h>
-    struct tr0y_tcphdr *tcpHdr; // not in <netinet/tcp.h> , my own tcp_header
-    u_int hlen; //tcp header length
-    char *data_area;
-
-
-}
 
 
 
