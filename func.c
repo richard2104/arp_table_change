@@ -57,14 +57,14 @@ void GET_MYMAC(uint8_t *mac, char *interface) {
 }
 void GET_MYIP(u_int8_t *ip_addr, char *interface) {
 	int fd;
-    struct ifreq ifr;
+	struct ifreq ifr;
 
-    fd = socket(AF_INET, SOCK_DGRAM, 0);
-    ifr.ifr_addr.sa_family = AF_INET;
+	fd = socket(AF_INET, SOCK_DGRAM, 0);
+	ifr.ifr_addr.sa_family = AF_INET;
 	strncpy(ifr.ifr_name, interface, IFNAMSIZ-1);
-    ioctl(fd, SIOCGIFADDR, &ifr);
-    /* and more importantly */
-    printf("%s\n", inet_ntoa(((struct sockaddr_in *)&ifr.ifr_addr)->sin_addr));
+	ioctl(fd, SIOCGIFADDR, &ifr);
+	/* and more importantly */
+	printf("%s\n", inet_ntoa(((struct sockaddr_in *)&ifr.ifr_addr)->sin_addr));
 	memcpy(ip_addr, &((struct sockaddr_in *)&ifr.ifr_addr)->sin_addr, IP_ADDR_LEN);
     
 	close(fd);
@@ -74,7 +74,7 @@ void GET_MYIP(u_int8_t *ip_addr, char *interface) {
 u_char* ARP_REQUEST(pcap_t *handle, u_char *mac_addr, struct in_addr *senderIP, struct in_addr *targetIP) {
 	u_char* packet;
 	u_char* recv_packet;
-    struct ether_header etherHdr, *recv_ether; // <netinet/ether.h>
+	struct ether_header etherHdr, *recv_ether; // <netinet/ether.h>
 	struct arp_hdr_ arp_h, *recv_arp;
 
 	struct pcap_pkthdr *header;

