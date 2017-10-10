@@ -1,5 +1,4 @@
 #include <pcap.h>		//for capturing network
-#include <stdint.h>
 #include <netinet/in.h> //for ntohs
 
 // structure
@@ -7,6 +6,23 @@
 #include <netinet/ip.h>
 #include <arpa/inet.h>
 //#include <netinet/tcp.h> was not used, since I used my own structure tr0y_tcphdr
+
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <sys/ioctl.h>
+//#include <netinet/if_ether.h>
+#include <bits/ioctls.h>
+//#include <linux/if_ether.h>
+#include <ifaddrs.h>
+#include <netdb.h>
+#include <net/if.h>
+#include <unistd.h>
+#include <string.h>
+
+#include <stdlib.h>
+#include <stdio.h>
+#include <stdint.h>
+
 
 /* Ethernet addresses are 6 bytes */
 #define ETHER__ADDR_LEN	6
@@ -16,17 +32,18 @@
 
 #define IP_ADDR_LEN 4
 
-struct arphdr{
-    u_int16_t ar_hrd; // format of hardware address
-    u_int16_t ar_pro; // format of protocol address
-    u_int8_t ar_hln;  // length of hardware address
-    u_int8_t ar_pln;  // length of protocol address
-    u_int16_t ar_op;  // OP_CODE
-    u_int8_t ar_sha[6];
-    u_int8_t ar_sip[4];
-    u_int8_t ar_tha[6];
-    u_int8_t ar_tip[4];
-};
+typedef struct arp_hdr_ {
+	uint16_t htype;
+	uint16_t ptype;
+	uint8_t hlen;
+	uint8_t plen;
+	uint16_t opcode;
+	uint8_t sender_mac[6];
+	uint8_t sender_ip[4];
+	uint8_t target_mac[6];
+	uint8_t target_ip[4];
+}arp_hdr;
+
 
 typedef u_int tcp_seq;
 struct tr0y_tcphdr {
@@ -49,32 +66,23 @@ struct tr0y_tcphdr {
     u_int16_t th_urp;       /* urgent pointer */
 };
 
+// Define some constants.
+#define ETH_HDRLEN 14      // Ethernet header length
+#define IP4_HDRLEN 20      // IPv4 header length
+#define ARP_HDRLEN 28      // ARP header length
+#define ARPOP_REQUEST 1    // Taken from <linux/if_arp.h>
+
+void print_mac(uint8_t *mac);
+char *allocate_strmem(int len);
+uint8_t *allocate_ustrmem (int len);
+void GET_MYMAC(uint8_t *mac, char *interface);
 /*
-struct ip {
-#if __BYTE_ORDER == __LITTLE_ENDIAN
-    unsigned int ip_hl:4;       // header length 
-    unsigned int ip_v:4;        // version 
-#endif
-#if __BYTE_ORDER == __BIG_ENDIAN
-    unsigned int ip_v:4;        // version 
-    unsigned int ip_hl:4;       // header length 
-#endif
-    u_int8_t ip_tos;            // type of service 
-    u_short ip_len;         // total length 
-    u_short ip_id;          // identification 
-    u_short ip_off;         // fragment offset field 
-#define IP_RF 0x8000            // reserved fragment flag 
-#define IP_DF 0x4000            // dont fragment flag 
-#define IP_MF 0x2000            // more fragments flag 
-#define IP_OFFMASK 0x1fff       // mask for fragmenting bits 
-    u_int8_t ip_ttl;            // time to live 
-    u_int8_t ip_p;          // protocol 
-    u_short ip_sum;         // checksum 
-    struct in_addr ip_src, ip_dst;  // source and dest address 
-};
+void SET_ARP_HDR(arp_hdr *arp_header, uint8_t *sender_mac, uint8_t *target_mac, int flag);
+void GET_IP_ADDR(char *ip, char *interface);
+uint8_t *SET_ETHER_PKT(uint8_t *dst_mac, uint8_t *src_mac, arp_hdr arp_header);
+uint8_t *SEND_PACKET(uint8_t *request, char *interface, struct pcap_pkthdr *header, int flag);
+uint8_t *PARSE_SENDER_MAC(const u_char *pkt_data);
 */
-
-
 /*
 struct ethhdr {
     unsigned char   h_dest[ETH_ALEN];   // destination eth addr 

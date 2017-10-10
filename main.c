@@ -1,39 +1,54 @@
-#include <stdio.h>
-#include <pcap.h>
-#include <stdlib.h>
 #include "my_pcap.h"
 
 void callback(u_char *p, const struct pcap_pkthdr *pkthdr, const u_char *packet);
+
 
 int main(int argc, char* argv[]) {
    
     char *dev;
     char errbuf[PCAP_ERRBUF_SIZE]; // 256
     pcap_t *pcd;
+    uint8_t *my_mac; //or just my_mac[ETHER_ADDR_LEN] and not use ustrmem
+	uint8_t *my_ip;
+	struct in_addr senderIP, targetIP, myIP;
     
-    u_char* broadcast = '';
-    int length = 0;
+	int length = 0;
     unsigned char packet[1500];
-
+	
     if (argc != 4){
         puts("[-]Usage : ./arp_send [interface] [sender_ip] [target_ip]");
         return -1;
     }
-	// pcap_lookupdev for setting the device
-	dev = pcap_lookupdev(errbuf);
-	if (dev == NULL) {
-		fprintf(stderr, "Couldn't find default device: %s\n", errbuf);
+	
+	my_mac = allocate_ustrmem(ETHER_ADDR_LEN);
+	my_ip  = allocate_ustrmem(IP_ADDR_LEN);
+	
+	dev = argv[1];
+	printf("\n[+] device : %s\n",dev);
+	GET_MYMAC(my_mac, argv[1]); // saved in my_mac & print out
+	GET_MYIP(my_ip,argv[1]); //print out my_ip
+
+	// argv[2],argv[3] to sender and target
+	inet_pton(AF_INET,argv[2],&senderIP.s_addr); //10진수 IP 주소를 2진수 IP 주소로 변환하는 함수
+	inet_pton(AF_INET,argv[3],&targetIP.s_addr);
+
+	pcd = pcap_open_live(dev,BUFSIZ,1,1000,errbuf);
+	if(pcd == NULL){
+        fprintf(stderr, "Couldn't open device: %s\n", errbuf);
 		exit(1);
 	}
-    //pcap_t *pcap_open_live(char *device, int snaplen, int promisc, int to_ms, char *ebuf)
-    pcd = pcap_open_live(dev, BUFSIZ,  0/*NON-PROMISCUOUS*/, -1, errbuf);
-
-    if (pcd == NULL) {
-        fprintf(stderr, "Couldn't open device: %s\n", errbuf);
+    //Ethernet header check
+    if (pcap_datalink(pcd) != DLT_EN10MB){
+        fprintf(stderr, "Device %s doesn't provide Ethernet headers\n", argv[1]);
         exit(1);
+    }
 
+	// me(attacker) request to victim for mac address.
+	ARP_REQUEST(pcd,my_mac,my_ip,&myIP,&senderIP); // sender == victim / target == gateway
+	
 
-	// 1st stage: making ARP packet (request) or you can just broadcast.
+/*
+	// 1st stage: making ARP packet (request) or you can just broadcast and jump over to 3rd stage
 	memset(packet, 0, sizeof(packet));
 
 
@@ -47,7 +62,7 @@ int main(int argc, char* argv[]) {
 	// 3rd stage: capturing the ARP packet (reply) for getting victim's mac address
 	pcap_loop(pcd, 0, callback, NULL);
 
-
+*/
 }
 
 void callback(u_char *p, const struct pcap_pkthdr *pkthdr, const u_char *packet) {
@@ -57,8 +72,6 @@ void callback(u_char *p, const struct pcap_pkthdr *pkthdr, const u_char *packet)
     struct tr0y_tcphdr *tcpHdr; // not in <netinet/tcp.h> , my own tcp_header
     u_int hlen; //tcp header length
     char *data_area;
-
-
 
 
 }
